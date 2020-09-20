@@ -532,7 +532,7 @@ if (!$testmode) {
 		$smile=":snow_capped_mountain: :snow_capped_mountain: :chart_with_upwards_trend:"
 	}
 	$message="$smile *IVSA data for  $proj* \n". $message; 
-	$url="https://hooks.slack.com/services/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"; # labnotes;
+	$url="https://hooks.slack.com/services/T04SKCPBV/B0QNRN0LW/xxxx"; # labnotes;
 	system("curl -X POST -H 'Content-type: application/json' --data '{\"text\": \"$message\", \"channel\": \"#labnotes\", \"hao\": \"Analyst Jr.\", \"icon_emoji\": \":chart_with_upwards_trend:\"}' $url"); 
 }
 
