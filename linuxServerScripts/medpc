@@ -1,0 +1,132 @@
+#!/usr/bin/perl
+
+# process medpc datafile. 
+# this version 2010-01-17 does not process the E, F, G, H data (timing of the events) 
+
+if ($ARGV[0]){
+	$DirName=$ARGV[0];
+	$DirName=~s/\/$//;
+} else {
+	print "using default destination folder ";
+	$DirName="/home/hao/Dropbox/medpc/rawdata/";
+	chomp($DirName);
+	$DirName=~s/\/$//;
+}
+
+print "processing $DirName\n";
+
+# move old data files
+system("mv -uv `find /home/hao/Dropbox/medpc/rawdata/ -mtime +30 -name \"*Subject*\"` /home/hao/Dropbox/archivedRawData/\n");
+open (OUT, ">$DirName.csv");
+open (W, ">/home/hao/Dropbox/medpc/bodyweight.tmp.csv");
+
+print OUT "zdate\tStart_time\tEID\tBox\tAID\tweight\tlength\tschedule\tActiveLick\tInactiveLick\tReward\tControlReward\tsaccconc\tsa_drug\tdemo\tnote\tDemoLick\tOBpoke\tDmPoke\n";
+
+opendir(DIR, $DirName) || die "Could not find directory $DirName";
+
+
+rewinddir(DIR);
+@FileNames = readdir(DIR);
+@FileNames = sort (@FileNames);
+closedir(DIR);
+$date="";
+foreach $file (@FileNames) {
+	if ($file=~/^(\w)_Sub/){
+		$computer=$1; 
+	}
+	open(F, "$DirName/$file") || die;
+	$oss=$ossStart="";
+	while (<F>) {
+#		print "$_";
+		$cmt="";
+		$_=~s/\r//;
+		$date=$1 if ($_=~/Start Date:\s+(\d\d\/\d\d\/\d\d)/) ;
+		$subj=$1 if $_=~/Subject:\s+(\w.+)/;
+		$subj=$1 if $_=~/Subject:\s+(\#.+)/;
+		$subj=~s/ //g;
+		if ($_=~/Experiment:\s+(\w.+)/i){
+			$exp=$1 ;
+			$exp=~s/noWght_//;
+			$exp=~s/ //g;
+		}
+
+		$time=$1 if $_=~/Start Time:\s+(\d+:\d\d:\d\d)/;
+		$Box=$computer.$1 if $_=~/^Box:\s+(\d+)/;
+		$oss=1 if ($_=~/MSN:.+OSS/);
+	
+		if ($oss) {
+			$S=$1 if $_=~/^S:\s+(\d+)\./;
+			if ($_=~/^B:/){	
+				$ossStart=1;
+				next;
+			}
+			if ($ossStart == 1 ){
+				#print $_;
+				($t,$t0, $A, $B, $C)=split(/ +/, $_);
+				#		print "t=$t, A=$A, B=$B, C=$C\n";
+				$ossStart=0;
+			}
+			$R=2;
+		} else {
+			$A=$1 if $_=~/^A:\s+(\d+)\./;
+			$B=$1 if $_=~/^B:\s+(\d+)\./;
+			$C=$1 if $_=~/^C:\s+(\d+)\./;
+			$D=$1 if $_=~/^D:\s+(\d+)\./;
+			$J=$1 if $_=~/^J:\s+(\d+)\./;
+			$K=$1 if $_=~/^K:\s+(\d+)\./;
+			$R=$1 if ($_=~/^R:\s+(\d+)\./ & !$R);
+			$R=$1 if $_=~/MSN: R_(VR\d+)/;
+			# MSN: R_VR10_IR_CAV_01212015
+			$P=$1 if $_=~/^P:\s+(\d+)\./;
+			$Q=$1 if $_=~/^Q:\s+(\d+)\./;
+			$S=$1 if $_=~/^S:\s+(\d+)\./;
+			$W=$1 if $_=~/^W:\s+(\d+\.\d+)/;
+			$W="" if ($W==120.001);
+		}
+		if ($_=~/^\\(.*)/){ 
+			$cmt=$1 ;
+			$lastline=1;
+		}
+		$lastline=1	if ($_=~/^$/);
+		#	$grp=$drug=$demo=$sacc='';
+		if ($_=~/Group:\s+(\w.+)$/){
+			$grp=lc($1); 
+			$drug=$1 if ($grp=~/(Nic\d+|sal|EtOH\d+)/i);
+			$demo=$1 if ($grp=~/(solo|demo)/i);
+			$demo=$1 if ($grp=~/(PSE|NSE)/i);
+			$sacc=$1 if ($grp=~/(sac+\d+|water|cocoaonly)/i);
+			$grp="" if ($grp =~/oss/);
+
+		}
+		
+		if ($lastline & $date=~/\d\d/){
+			if ($subj=~/^#/ ){ 
+				$out.=$date."\t".$time."\t".$exp."\t".$Box."\t".$subj."\t".$W."\t".$S."\t".$R."\t".$A."\t".$B."\t".$C."\t$sacc\t$drug\t$demo\t$P\t$J\t$K\t\t$grp\t$cmt\n";
+			} elsif ($date) {
+				$out.=$date."\t".$time."\t".$exp."\t".$Box."\t".$subj."\t".$W."\t".$S."\t".$R."\t".$A."\t".$B."\t".$C."\t".$D."\t$sacc\t$drug\t$demo\t$grp\t$P\t$J\t$K\t$cmt\n"; 
+			}
+			$subj=uc($subj);
+			print W "$date\t$subj\t$W\t$C\n" if ($W > 1); #body weight
+			$subj=$exp=$time=$grp=$Box=$A=$B=$C=$D=$J=$K=$R=$P=$W=$S=$cmt=$demo=$drug=$grp=$sacc=$Q=$lastline="";
+		}
+
+	}
+	close (F);
+	$computer=""
+
+}
+
+#		$out.="end".$date."\t".$subj."\t".$exp."\t".$grp."\t".$A."\t".$B."\t".$C."\t".$D."\t".$cmt."\n" ;
+
+print OUT $out;
+system("cut -f 1 $DirName.csv |grep -v ate|sort |uniq >>$DirName.csv");
+#system("sort -k1,1r -k3,3 -k5,5  $DirName.csv >> tmp.csv");
+system("sort -k1,1r -k3,3 -k5,5  $DirName.csv >> tmp.csv");
+
+system("mv tmp.csv $DirName.csv");
+system ("sort /home/hao/Dropbox/medpc/bodyweight.tmp.csv > /home/hao/Dropbox/medpc/bodyweight.csv");
+#print "done sorting data files \n";
+
+if ($ARGV[1] ne 'nosoffice') {
+	system("libreoffice --calc $DirName.csv &");
+}
